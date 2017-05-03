@@ -21,3 +21,4 @@
 # Debug files
 # Kernel Module Compile Results
 /cmake-build-debug/
+.idea/
