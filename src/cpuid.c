@@ -8,8 +8,8 @@
 
 #include "../include/cpuid.h"
 
-#if !(__x86_64__ || __i386__)
-#error this program will only work on x86 processors
+#if !(__x86_64__)
+#error this program will only work on x86_64 processors
 #endif
 
 
@@ -23,7 +23,7 @@ getbrandstring(struct cpuinfo_s *cpuinfo) {
     char eax_ret[4], ebx_ret[4], ecx_ret[4], edx_ret[4];
     char str[48] = {'\0'};
     //0x80000002, 0x80000003, 0x80000004 all need to be called
-    for (uint32_t i = 0x80000002; i < 0x80000005; i++) {
+    for (uint32_t i = 0x80000002; i <= 0x80000004; ++i) {
 
         asm("xor %%ebx, %%ebx;"
                 "xor %%ecx, %%ecx;"
@@ -48,7 +48,7 @@ getbrandstring(struct cpuinfo_s *cpuinfo) {
     char *curr = &str[0];
     size_t org_len = strlen(str);
     uint space_count = 0;
-    while (!isalpha(*curr)) {
+    while (isspace(*curr)) {
         curr++;
         space_count++;
     }
@@ -139,6 +139,7 @@ checkcpuid() {
 
     uint64_t rflags_updated, rflags_original;
 
+    //TODO: make this compatible with i686 assembly
     asm("pushf;"
             "pop %%rax;"
             "mov %%rax, %%rbx;"
@@ -152,6 +153,8 @@ checkcpuid() {
 
     // Some code inspection utilities will incorrectly report that these are always equal
     // because they cannot determine the state of these varibles from the above inline assembly
+#pragma clang diagnostic push
+#pragma ide diagnostic ignored "OCDFAInspection"
     if (rflags_updated == rflags_original) {
         // If we could not set the 21st bit of the rFLAGS register
         // cpuid is not supported so we return "false" here
@@ -159,6 +162,7 @@ checkcpuid() {
     } else {
         return 1;
     }
+#pragma clang diagnostic pop
 }
 
 uint32_t get_extended_leaf() {
@@ -185,8 +189,6 @@ main() {
         cpuinfo->cpuvend[0] = '\0';
         strcpy(cpuinfo->brandstring, "UNK\0");
 
-        printf("testing -> %s\n", cpuinfo->brandstring);
-
         getcputype(cpuinfo);
         getbasicinfo(cpuinfo);
         getbrandstring(cpuinfo);
@@ -209,6 +211,7 @@ main() {
         // TODO: the Misc and feature registers
         // TODO: Do a complete implementation of the Intel spec
         // TODO: After Intel spec is complete, Do AMD spec
+        // TODO: get cache topology
 
         free(cpuinfo);
     } else {
