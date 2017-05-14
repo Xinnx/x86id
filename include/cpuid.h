@@ -1,10 +1,13 @@
 #pragma once
 
-#include <stdlib.h>
 #include <stdint.h>
+#include <stdlib.h>
 
 // change to 1 to enable a bit more output on the terminal
 #define DEBUG_OUTPUT 1
+
+// MinGW doesn't have uint?
+typedef unsigned int uint;
 
 struct cpufeat_eax {
   uint reserved1  : 4;    // 31:28

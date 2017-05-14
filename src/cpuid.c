@@ -1,15 +1,14 @@
-#include <stdio.h>
-#include <stdlib.h>
 #include <stdint.h>
-#include <limits.h>
+#include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <ctype.h>
 
 
 #include "../include/cpuid.h"
 
-#if !(__x86_64__)
-#error this program will only work on x86_64 processors
+#if !(__x86_64__ || __i686__)
+#error this program will only work on x86 processors
 #endif
 
 
@@ -96,21 +95,17 @@ getbasicinfo(struct cpuinfo_s *cpuinfo) {
 
 
     // Model Calculation
-    if (!(cpuinfo->u_model_info.b.BaseFamily == 0xF
-          || cpuinfo->u_model_info.b.BaseFamily == 0x6)) {
+    if (!(cpuinfo->u_model_info.b.BaseFamily == 0xF || cpuinfo->u_model_info.b.BaseFamily == 0x6)) {
         // ExtModel is reserved in this case
         cpuinfo->model = (uint8_t) cpuinfo->u_model_info.b.BaseModel;
     } else {
         cpuinfo->model =
-                (uint8_t) (((cpuinfo->u_model_info.b.ExtModel) << 4) +
-                           cpuinfo->u_model_info.b.BaseModel);
+                (uint8_t) (((cpuinfo->u_model_info.b.ExtModel) << 4) + cpuinfo->u_model_info.b.BaseModel);
     }
-
     if (DEBUG_OUTPUT == 1) {
         printf("EAX: 0x%.8X\t EBX: 0x%.8X\n", eax_ret, ebx_ret);
         printf("ECX: 0x%.8X\t EDX: 0x%.8X\n\n", ecx_ret, edx_ret);
     }
-
 }
 
 // the 0h leaf of cpuid also returns the highest supported function
@@ -137,9 +132,9 @@ getcputype(struct cpuinfo_s *cpuinfo) {
 int
 checkcpuid() {
 
-    uint64_t rflags_updated, rflags_original;
+#if (__x86_64__)
 
-    //TODO: make this compatible with i686 assembly
+    uint64_t flags_updated, flags_original;
     asm("pushf;"
             "pop %%rax;"
             "mov %%rax, %%rbx;"
@@ -148,15 +143,37 @@ checkcpuid() {
             "popf;"
             "pushf;"
             "pop %%rax;"
-    : "=a"(rflags_updated), "=b"(rflags_original) /* output */
+    : "=a"(flags_updated), "=b"(flags_original) /* output */
+    : /* input */
+    : "cc" /* clobber */
     );
+
+#elif (__i686__)
+
+    uint32_t flags_updated, flags_original;
+    asm("pushf;"
+        "pop %%eax;"
+        "mov %%eax, %%ebx;"
+        "xor $0x00200000, %% eax;"
+        "push %%eax;"
+        "popf;"
+        "pushf;"
+        "pop %%eax;"
+        : "=a"(flags_updated), "=b"(flags_original) /* output */
+        : /* input */
+        : "cc" /* clobber */
+        );
+
+#else
+#error unsuported arch
+#endif
 
     // Some code inspection utilities will incorrectly report that these are always equal
     // because they cannot determine the state of these varibles from the above inline assembly
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "OCDFAInspection"
-    if (rflags_updated == rflags_original) {
-        // If we could not set the 21st bit of the rFLAGS register
+    if (flags_updated == flags_original) {
+        // If we could not set the 21st bit of the (r/e)FLAGS register
         // cpuid is not supported so we return "false" here
         return 0;
     } else {
