@@ -12,7 +12,7 @@
 #endif
 
 
-// calls cpuid leafs 0x8000000[2:4] to obtain the cpu name
+// calls cpuid leafs 0x8000000[2,3,4] to obtain the cpu name
 // IE. "       Intel(R) Core(TM) i5-2540M CPU @ 2.60GHz\0"
 // returns 4 characters in each register [eax,ebx,ecx,edx]
 // for a total of 48 characters -- The string is null terminated
@@ -128,6 +128,28 @@ getcputype(struct cpuinfo_s *cpuinfo) {
     strncat(cpuinfo->cpuvend, vendor2, 4);
 }
 
+void
+getcpucache_leaf2() {
+    uint32_t eax_ret, ebx_ret, ecx_ret, edx_ret;
+    asm(    "mov $0x2, %%eax;"
+            "xor %%ebx, %%ebx;"
+            "xor %%ecx, %%ecx;"
+            "xor %%edx, %%edx;"
+            "cpuid"
+    : "=a"(eax_ret), "=b"(ebx_ret), "=c"(ecx_ret), "=d"(edx_ret) /*output*/
+    : /*input*/
+    : /*clobber*/
+    );
+    printf("LEAF2 -> \n\n");
+    printf("EAX: 0x%.8X\n EBX: 0x%.8X\n ECX: 0x%.8X\n EDX: 0x%.8X\n",
+    eax_ret, ebx_ret,ecx_ret,edx_ret);
+}
+
+void
+getcpucache_leaf4(){
+
+}
+
 // returns non-zero if cpuid instruction is available
 int
 checkcpuid() {
@@ -224,6 +246,8 @@ main() {
         printf("         Family: 0x%.2X\n", cpuinfo->family);
         printf("       Stepping: 0x%.2X\n", cpuinfo->u_model_info.b.Stepping);
 
+        printf("\n\n");
+        getcpucache_leaf2();
 
         // TODO: the Misc and feature registers
         // TODO: Do a complete implementation of the Intel spec
