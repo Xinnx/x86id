@@ -3,9 +3,11 @@
 #include <stdio.h>
 #include <string.h>
 #include <ctype.h>
+#include <stdbool.h>
 
 
-#include "../include/cpuid.h"
+#include "cpuid.h"
+#include "leaf2_descriptors.h"
 
 #if !(__x86_64__ || __i686__)
 #error this program will only work on x86 processors
@@ -75,6 +77,12 @@ getbasicinfo(struct cpuinfo_s *cpuinfo) {
     : /* clobber */
     );
 
+    if (DEBUG_OUTPUT == 1) {
+        printf("LEAF 1 DEBUG:\n");
+        printf("EAX: 0x%.8X\t EBX: 0x%.8X\n", eax_ret, ebx_ret);
+        printf("ECX: 0x%.8X\t EDX: 0x%.8X\n\n", ecx_ret, edx_ret);
+    }
+
     cpuinfo->u_model_info.b.reserved1 = ((eax_ret & 0xF0000000) >> 28);
     cpuinfo->u_model_info.b.ExtFamily = ((eax_ret & 0x0FF00000) >> 20);
     cpuinfo->u_model_info.b.ExtModel = ((eax_ret & 0x000F0000) >> 16);
@@ -102,10 +110,6 @@ getbasicinfo(struct cpuinfo_s *cpuinfo) {
         cpuinfo->model =
                 (uint8_t) (((cpuinfo->u_model_info.b.ExtModel) << 4) + cpuinfo->u_model_info.b.BaseModel);
     }
-    if (DEBUG_OUTPUT == 1) {
-        printf("EAX: 0x%.8X\t EBX: 0x%.8X\n", eax_ret, ebx_ret);
-        printf("ECX: 0x%.8X\t EDX: 0x%.8X\n\n", ecx_ret, edx_ret);
-    }
 }
 
 // the 0h leaf of cpuid also returns the highest supported function
@@ -120,6 +124,13 @@ getcputype(struct cpuinfo_s *cpuinfo) {
     : /* input */
     : /* clobbered */
     );
+
+    if(DEBUG_OUTPUT) {
+        printf("LEAF 0 DEBUG:\n");
+        printf("EAX: 0x%.2X EBX: %.4s\nECX: %.4s EDX: %.4s\n\n",
+               cpuinfo->flevel, vendor1, vendor2, vendor3);
+    }
+
     cpuinfo->ext_flevel = get_extended_leaf();
 
     // TODO: Another str cat funtion to move to util.h
@@ -131,6 +142,9 @@ getcputype(struct cpuinfo_s *cpuinfo) {
 void
 getcpucache_leaf2() {
     uint32_t eax_ret, ebx_ret, ecx_ret, edx_ret;
+    uint8_t leaf_descriptor[16];
+    bool leaf4_cap = false;
+
     asm(    "mov $0x2, %%eax;"
             "xor %%ebx, %%ebx;"
             "xor %%ecx, %%ecx;"
@@ -140,14 +154,73 @@ getcpucache_leaf2() {
     : /*input*/
     : /*clobber*/
     );
-    printf("LEAF2 -> \n\n");
-    printf("EAX: 0x%.8X\n EBX: 0x%.8X\n ECX: 0x%.8X\n EDX: 0x%.8X\n",
-    eax_ret, ebx_ret,ecx_ret,edx_ret);
+
+    if(DEBUG_OUTPUT) {
+        printf("LEAF2 DEBUG:\n");
+        printf("EAX: 0x%.8X EBX: 0x%.8X\nECX: 0x%.8X EDX: 0x%.8X\n\n",
+               eax_ret, ebx_ret, ecx_ret, edx_ret);
+    }
+
+    leaf_descriptor[3] = (uint8_t)((eax_ret & 0xFF000000) >> 24);
+    leaf_descriptor[2] = (uint8_t)((eax_ret & 0x00FF0000) >> 16);
+    leaf_descriptor[1] = (uint8_t)((eax_ret & 0x0000FF00) >> 8);
+    leaf_descriptor[0] = (uint8_t) (eax_ret & 0x000000FF);
+
+    leaf_descriptor[7] = (uint8_t)((ebx_ret & 0xFF000000) >> 24);
+    leaf_descriptor[6] = (uint8_t)((ebx_ret & 0x00FF0000) >> 16);
+    leaf_descriptor[5] = (uint8_t)((ebx_ret & 0x0000FF00) >> 8);
+    leaf_descriptor[4] = (uint8_t) (ebx_ret & 0x000000FF);
+
+    leaf_descriptor[11] = (uint8_t)((ecx_ret & 0xFF000000) >> 24);
+    leaf_descriptor[10] = (uint8_t)((ecx_ret & 0x00FF0000) >> 16);
+    leaf_descriptor[9]  = (uint8_t)((ecx_ret & 0x0000FF00) >> 8);
+    leaf_descriptor[8]  = (uint8_t) (ecx_ret & 0x000000FF);
+
+    leaf_descriptor[15] = (uint8_t)((edx_ret & 0xFF000000) >> 24);
+    leaf_descriptor[14] = (uint8_t)((edx_ret & 0x00FF0000) >> 16);
+    leaf_descriptor[13] = (uint8_t)((edx_ret & 0x0000FF00) >> 8);
+    leaf_descriptor[12] = (uint8_t) (edx_ret & 0x000000FF);
+
+
+    for(int i = 0; i < 16; ++i) {
+        uint8_t current_desc = leaf_descriptor[i];
+        switch(current_desc){
+            case 0x00: {
+                if (DEBUG_OUTPUT)
+                    printf("Skipping null @ %d \n", i);
+                break;
+            }
+            case 0x01: {
+                if ((i % 4) == 0) {
+                    if (DEBUG_OUTPUT)
+                        printf("Skipping 0x01 @ %d \n", i);
+                } else {
+                    printf("%s\n", leaf2_descriptions[current_desc]);
+                }
+                break;
+            }
+            case 0xFF: {
+                leaf4_cap = true;
+                // A descriptor of 0xFF means leaf 2 does not return all the cache infomation
+                // we need to call leaf 4 to get the rest of the cache info.
+                // for now we can fall through to the default behavior.
+            }
+            default: {
+                printf("%s\n", leaf2_descriptions[current_desc]);
+                break;
+            }
+        }
+    }
+
+    if (leaf4_cap) {
+        getcpucache_leaf4();
+    }
 }
 
-void
-getcpucache_leaf4(){
 
+void
+getcpucache_leaf4() {
+    return;
 }
 
 // returns non-zero if cpuid instruction is available
@@ -204,9 +277,10 @@ checkcpuid() {
 #pragma clang diagnostic pop
 }
 
-uint32_t get_extended_leaf() {
-    uint32_t ext_leaf_max = 0;
+uint32_t
+get_extended_leaf() {
 
+    uint32_t ext_leaf_max = 0;
     asm("mov $0x80000000, %%eax;"
             "cpuid;"
     : "=a"(ext_leaf_max) /* Output */
@@ -218,7 +292,7 @@ uint32_t get_extended_leaf() {
 }
 
 int
-main() {
+main(int argc, char* argv[]) {
 
     if (checkcpuid()) {
 

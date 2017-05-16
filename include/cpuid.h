@@ -146,3 +146,5 @@ void getbasicinfo(struct cpuinfo_s* cpuinfo);
 void getcputype(struct cpuinfo_s* cpuinfo);
 int checkcpuid(void);
 uint32_t get_extended_leaf(void);
+void getcpucache_leaf2();
+void getcpucache_leaf4();
