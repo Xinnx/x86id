@@ -133,6 +133,7 @@ enum LEAF2 {
     LEAF_2_NO_REPORT = 0xFF
 };
 
+// empty strings are reserved/not defined in intel spec
 const char* const leaf2_descriptions[] = {
     "Null descriptor, this byte contains no information",
     "Instruction TLB: 4 KByte pages, 4-way set associative, 32 entries",
